@@ -26,9 +26,7 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
-  cors: {
-    origin: '*',
-  },
+  cors: { origin: '*' },
 });
 
 app.set('io', io);
@@ -44,11 +42,13 @@ app.use(morgan('dev'));
 // Compliance guard runs before routes
 app.use(complianceGuard);
 
+// Public auth route
+app.use('/api/auth', authRouter);
+
 // Audit trail after auth
 app.use(auditTrail);
 
-// Routes
-app.use('/api/auth', authRouter);
+// Protected routes
 app.use('/api/patient', authMiddleware, patientRouter);
 app.use('/api/encounter', authMiddleware, encounterRouter);
 app.use('/api/notes', authMiddleware, notesRouter);
@@ -60,7 +60,7 @@ app.use('/api/feedback', authMiddleware, feedbackRouter);
 // Healthcheck
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// Serve minimal frontend (SPA assets)
+// Serve minimal frontend (static)
 app.use(express.static('src/frontend'));
 
 // Mongo connection
