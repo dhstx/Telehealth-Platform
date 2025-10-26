@@ -1,14 +1,24 @@
 ### [English]
 
-# All In One Telehealth Platform -AIOTP-
+# DaleyHealth Telemedicine MVP
 
 ## Overview
 
-The **All In One Telehealth Platform (AIOTP)** is an open-source software solution commissioned by the **Pan American Health Organization (PAHO/WHO)** through the Information Systems and Digital Health Unit (EIH/IS) from the Department of Evidence and Intelligence for Action in Health, to the **Center for Implementation and Innovation in Health Policies (CIIPS)** at the **Institute for Clinical Effectiveness and Health Policy (IECS)**. This platform aims to improve access to healthcare for people and communities in Latin America and the Caribbean.
+Professional, AI-driven telemedicine MVP integrating Corti (speech) and OpenEvidence (evidence-linked text summaries). Sandbox mode uses synthetic data only, designed for physician advisory testing — not for live patient use.
 
 This solution is part of the [**IS4H**](https://www.paho.org/en/is4h-information-systems-health) (Information Systems for Health) initiative, and relates to the [**8 Guiding Principles for Digital Transformation of the Health Sector**](https://iris.paho.org/handle/10665.2/54256).
 
-AIOTP is a telehealth suite containing 2 main modules: a Clinical Record Module based on OpenEMR, and a Videoconference module, based on Jitsi and Laravel. More modules will be added progressively. Documentation is available at the wiki webpage.
+Stack: Node.js + Express, MongoDB (Mongoose), React + Tailwind, Socket.io, WebRTC. AI: OpenEvidence + OpenAI fallback, Corti streaming (stub in sandbox).
+
+Key routes:
+- `POST /api/auth/login` sandbox login returns JWT
+- `POST /api/sandbox/reset` reseed synthetic data
+- `POST /api/ai/summary` OpenEvidence summary with OpenAI fallback
+- `GET  /api/ai/corti` info; Socket.io namespace `/corti` streams insights
+- `CRUD /api/patient` demo patients
+- `POST /api/encounter/:id/soap` update SOAP and generate AI note
+- `GET  /api/audit` recent audit logs
+- `POST /api/feedback` clinician feedback
 
 - **Documentation Package / AIOTP Wiki**: [https://github.com/ciips-code/aiotp/wiki](https://github.com/ciips-code/aiotp/wiki)
 
@@ -44,7 +54,28 @@ The All In One Telehealth Platform is a collaborative effort involving multiple 
 
 ## Getting Started
 
-To get started with the All In One Telehealth Platform, please visit the following resources:
+1. Copy env and start server
+```bash
+cp .env.example .env
+npm install
+npm run seed
+npm run dev
+```
+
+2. Login to get a token
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"clinician@example.com","name":"Dr. Sandbox"}'
+```
+
+3. Seed demo data (with token)
+```bash
+curl -X POST http://localhost:3000/api/sandbox/reset \
+  -H 'Authorization: Bearer YOUR_JWT'
+```
+
+4. Open the minimal UI at `http://localhost:3000/`.
 
 - **AIOTP OpenEMR Package**: [https://github.com/ciips-code/openemr-telesalud](https://github.com/ciips-code/openemr-telesalud)
 
@@ -72,9 +103,15 @@ This project documentation is licensed as open-source under the Creative Commons
 
 - AIOTP OpenEMR Custom FHIR Integration Module License: https://github.com/ciips-code/openemr-cdss-smart/blob/master/LICENSE
 
-## Contact
+## 🚀 Developer Handoff
 
-For more information or to get in touch with the development team, please visit our [Contact Page](CONTACT.md).
+Target: Jan 15–31, 2026
+
+Next:
+- Add Python microservice for analytics
+- Add PostgreSQL layer
+- Expand HIPAA audit coverage
+- Full Corti rollout (replace sandbox stub)
 
 ---
 

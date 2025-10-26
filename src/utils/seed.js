@@ -1,70 +1,43 @@
-import { faker } from '@faker-js/faker';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 import Patient from '../models/Patient.js';
 import Encounter from '../models/Encounter.js';
-import AiNote from '../models/AiNote.js';
-import { generateSummaryForEncounter } from '../services/ai/noteGenerator.js';
 
-function randomGender() {
-  const genders = ['male', 'female', 'other'];
-  return genders[Math.floor(Math.random() * genders.length)];
-}
+dotenv.config();
 
-export async function reseedSandbox() {
-  await AiNote.deleteMany({});
-  await Encounter.deleteMany({});
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/daleyhealth_sandbox';
+
+async function run() {
+  await mongoose.connect(MONGO_URI);
   await Patient.deleteMany({});
+  await Encounter.deleteMany({});
 
-  const patients = [];
-  for (let i = 0; i < 5; i++) {
-    const gender = randomGender();
-    const name = faker.person.fullName({ sex: gender === 'male' ? 'male' : 'female' });
-    const dob = faker.date.birthdate({ min: 18, max: 85, mode: 'age' });
-    const patient = await Patient.create({
-      name,
-      dob,
-      gender,
-      demoVitals: {
-        heightCm: faker.number.int({ min: 150, max: 195 }),
-        weightKg: faker.number.int({ min: 50, max: 120 }),
-        heartRate: faker.number.int({ min: 55, max: 100 }),
-        systolic: faker.number.int({ min: 100, max: 140 }),
-        diastolic: faker.number.int({ min: 60, max: 90 }),
-        spo2: faker.number.int({ min: 95, max: 100 }),
-      },
-      synthetic: true,
-    });
-    patients.push(patient);
-  }
+  const patient = await Patient.create({
+    name: 'Jane Smith (Synthetic)',
+    dob: new Date('1972-02-02'),
+    gender: 'female',
+    syntheticVitals: { heartRate: 75, bloodPressure: '118/72', temperatureC: 36.9, spo2: 99 },
+    synthetic: true,
+  });
 
-  // Create 1-2 encounters per patient
-  for (const patient of patients) {
-    const numEnc = faker.number.int({ min: 1, max: 2 });
-    for (let i = 0; i < numEnc; i++) {
-      const soap = {
-        subjective: faker.lorem.sentences({ min: 2, max: 3 }),
-        objective: `Tele-exam limited. HR ${patient.demoVitals.heartRate}, BP ${patient.demoVitals.systolic}/${patient.demoVitals.diastolic}, SpO2 ${patient.demoVitals.spo2}%.`,
-        assessment: faker.helpers.arrayElement([
-          'Acute upper respiratory infection',
-          'Low back pain, likely musculoskeletal',
-          'Tension headache',
-          'Allergic rhinitis',
-        ]),
-        plan: 'Conservative care, OTC options, return precautions, follow-up in 1-2 weeks.',
-      };
-      const enc = await Encounter.create({
-        patientId: patient._id,
-        date: faker.date.recent({ days: 30 }),
-        soap,
-        vitals: {
-          heartRate: patient.demoVitals.heartRate,
-          systolic: patient.demoVitals.systolic,
-          diastolic: patient.demoVitals.diastolic,
-          spo2: patient.demoVitals.spo2,
-          tempC: faker.number.float({ min: 36.3, max: 37.8, multipleOf: 0.1 }),
-        },
-      });
-      const note = await generateSummaryForEncounter(enc._id);
-      await Encounter.findByIdAndUpdate(enc._id, { aiSummary: note.summaryText });
-    }
-  }
+  const encounter = await Encounter.create({
+    patientId: patient._id,
+    soap: {
+      subjective: 'Follow-up for hypertension management.',
+      objective: 'BP slightly elevated; patient asymptomatic.',
+      assessment: 'Hypertension, suboptimally controlled.',
+      plan: 'Adjust medication; reinforce low-sodium diet; schedule recheck in 4 weeks.',
+    },
+    vitals: { heartRate: 75, bloodPressure: '138/86', temperatureC: 36.9, spo2: 99 },
+  });
+
+  // eslint-disable-next-line no-console
+  console.log('Seeded:', { patientId: patient._id.toString(), encounterId: encounter._id.toString() });
+  await mongoose.disconnect();
 }
+
+run().catch((e) => {
+  // eslint-disable-next-line no-console
+  console.error(e);
+  process.exit(1);
+});

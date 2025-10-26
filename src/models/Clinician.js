@@ -4,7 +4,8 @@ const ClinicianSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
-    role: { type: String, enum: ['physician', 'nurse', 'admin'], default: 'physician' },
+    specialty: { type: String },
+    role: { type: String, enum: ['physician', 'nurse', 'admin', 'tester'], default: 'physician' },
     passwordHash: { type: String },
   },
   { timestamps: true }

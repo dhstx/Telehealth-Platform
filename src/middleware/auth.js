@@ -1,21 +1,19 @@
 import jwt from 'jsonwebtoken';
-import { config } from '../config/index.js';
+import { config } from '../config/env.js';
 
 export function authMiddleware(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  if (!token) return res.status(401).json({ error: 'Missing token' });
   try {
-    const payload = jwt.verify(token, config.jwtSecret);
-    req.user = { id: payload.sub, role: payload.role || 'physician', email: payload.email };
-    next();
-  } catch (e) {
+    const decoded = jwt.verify(token, config.jwtSecret);
+    req.user = { id: decoded.id, role: decoded.role };
+    return next();
+  } catch {
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
 
-export function signToken({ id, email, role = 'physician' }) {
-  const payload = { sub: id, email, role };
-  const opts = { expiresIn: '12h' };
-  return jwt.sign(payload, config.jwtSecret, opts);
+export function signToken(payload) {
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: '8h' });
 }

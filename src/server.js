@@ -1,110 +1,78 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import cors from 'cors';
+import mongoose from 'mongoose';
 import helmet from 'helmet';
+import cors from 'cors';
 import morgan from 'morgan';
-import compression from 'compression';
-import { connectToDatabase } from './utils/db.js';
-import { config } from './config/index.js';
 
-// Middleware
 import { auditTrail } from './middleware/auditTrail.js';
+import { complianceGuard } from './middleware/compliance.js';
 import { authMiddleware } from './middleware/auth.js';
 
-// Routes
-import patientRouter from './api/patients/routes.js';
-import encounterRouter from './api/encounters/routes.js';
-import aiRouter from './api/notes/routes.js';
-import authRouter from './api/auth/routes.js';
-import auditRouter from './api/audit/routes.js';
-import sandboxRouter from './api/sandbox/routes.js';
-import analyticsRouter from './api/analytics/routes.js';
-import ehrRouter from './api/ehr/routes.js';
-import { reseedSandbox } from './utils/seed.js';
+import patientRouter from './api/patients/index.js';
+import encounterRouter from './api/encounters/index.js';
+import notesRouter from './api/notes/index.js';
+import aiRouter from './api/ai/index.js';
+import auditRouter from './api/audit/index.js';
+import sandboxRouter from './api/sandbox/index.js';
+import feedbackRouter from './api/feedback/index.js';
+import authRouter from './api/auth/index.js';
+import { cortiSocketHandler } from './services/ai/corti/index.js';
+
+dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
-  cors: { origin: config.corsOrigin, methods: ['GET', 'POST'] },
+  cors: { origin: '*' },
 });
 
-// In-memory signaling rooms for demo only
-const rooms = new Map();
+app.set('io', io);
+// Wire Corti namespace
+cortiSocketHandler(io);
 
-io.on('connection', (socket) => {
-  socket.on('join-room', ({ roomId, userId }) => {
-    socket.join(roomId);
-    const participants = rooms.get(roomId) || new Set();
-    participants.add(userId);
-    rooms.set(roomId, participants);
-    socket.to(roomId).emit('user-joined', { userId });
-  });
-
-  socket.on('offer', ({ roomId, offer, from }) => {
-    socket.to(roomId).emit('offer', { offer, from });
-  });
-
-  socket.on('answer', ({ roomId, answer, from }) => {
-    socket.to(roomId).emit('answer', { answer, from });
-  });
-
-  socket.on('candidate', ({ roomId, candidate, from }) => {
-    socket.to(roomId).emit('candidate', { candidate, from });
-  });
-
-  socket.on('leave-room', ({ roomId, userId }) => {
-    socket.leave(roomId);
-    const participants = rooms.get(roomId) || new Set();
-    participants.delete(userId);
-    rooms.set(roomId, participants);
-    socket.to(roomId).emit('user-left', { userId });
-  });
-});
-
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+// Basic security & parsing
 app.use(helmet());
-app.use(compression());
-app.use(express.json({ limit: '1mb' }));
-app.use(morgan('combined'));
+app.use(cors());
+app.use(express.json({ limit: '2mb' }));
+app.use(morgan('dev'));
 
-// Health and identity
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
-app.get('/identity', (_req, res) =>
-  res.json({
-    name: 'DaleyHealth Telemedicine MVP',
-    mode: 'Physician-Facing Sandbox (synthetic data only)',
-    purpose:
-      'Demonstrate AI-assisted documentation, teleconsult workflow, and predictive analytics base.',
-  })
-);
+// Compliance guard runs before routes
+app.use(complianceGuard);
 
-// Auth routes (public)
+// Public auth route
 app.use('/api/auth', authRouter);
 
-// Audit trail should be after auth; it records clinician actions
+// Audit trail after auth
 app.use(auditTrail);
 
 // Protected routes
 app.use('/api/patient', authMiddleware, patientRouter);
 app.use('/api/encounter', authMiddleware, encounterRouter);
+app.use('/api/notes', authMiddleware, notesRouter);
 app.use('/api/ai', authMiddleware, aiRouter);
 app.use('/api/audit', authMiddleware, auditRouter);
 app.use('/api/sandbox', authMiddleware, sandboxRouter);
+app.use('/api/feedback', authMiddleware, feedbackRouter);
 
-// Future hooks
-app.use('/api/analytics', authMiddleware, analyticsRouter);
-app.use('/api/ehr', authMiddleware, ehrRouter);
+// Healthcheck
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Serve minimal frontend (static)
+app.use(express.static('src/frontend'));
+
+// Mongo connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/daleyhealth_sandbox';
+const PORT = process.env.PORT || 3000;
 
 async function start() {
   try {
-    await connectToDatabase();
-    if (config.sandboxMode) {
-      await reseedSandbox();
-    }
-    server.listen(config.port, () => {
+    await mongoose.connect(MONGO_URI);
+    server.listen(PORT, () => {
       // eslint-disable-next-line no-console
-      console.log(`Server listening on port ${config.port}`);
+      console.log(`Server listening on http://localhost:${PORT}`);
     });
   } catch (err) {
     // eslint-disable-next-line no-console
